@@ -2,7 +2,13 @@ import numpy as np
 import pandas as pd
 
 np.random.seed(42)
+epsilon = 1e-7
 
+def ReLU(z):  # ReLU activation function
+    return np.maximum(0, z)
+
+def ReLUPrime(z):  # derivative of ReLU activation function
+    return 1 * (z > 0)
 
 def softmax(logits):
     """
@@ -12,8 +18,9 @@ def softmax(logits):
     Returns:
     - probs : Normalized probabilities for each class,A numpy array of shape (n * number_of_classes)
     """
+    logits = logits - np.max(logits, axis=0, keepdims=True)
     logits = np.exp(logits)
-    return logits / np.sum(logits, axis = 0)
+    return logits / np.sum(logits, axis=0, keepdims=True)
 
 
 
@@ -23,12 +30,12 @@ def cross_entropy_loss(probs,target):
     
     Inputs:
     - probs : A numpy-array of shape ( n * number_of_classes )
-    - target : A numpy-array of shape ( n, )
+    - target : A numpy-array of shape ( n * number_of_classes )
     Returns:
     - loss : A scalar describing the mean cross-entropy loss over the batch
     """
-    pass
-    
+    return np.mean(np.sum(-target*np.log(probs+epsilon), axis=-1))
+
 
 
 def regularization_loss(weights,biases):
@@ -39,7 +46,7 @@ def regularization_loss(weights,biases):
     
     Returns : the regularization loss
     """
-    pass
+    return 0.5*(np.sum(weights**2) + np.sum(biases**2))
 
 
 
@@ -57,7 +64,7 @@ def loss_fn(probs,target,weights,biases,_lambda):
     
     Note : This function is not being used anywhere.This will be used just for grading
     """
-    pass
+    return cross_entropy_loss(probs, target) + _lambda*regularization_loss(weights,biases)
     
 
 
@@ -65,19 +72,21 @@ def check_accuracy(prediction,target):
     """
     Find the accuracy of the prediction
     Inputs:
-    - prediction : most-probable class for each datapoint, a numpy array of dimension (n, )
-    - target : ground truth , anumpy array of dimension (n,)
+    - prediction : class probs for each datapoint, a numpy array of dimension (n, no_classes)
+    - target : ground truth , a numpy array of dimension (n, no_classes)
     
     Returns :
-    
-    - accracy : a scalar between 0 and 1 ,describing the accuracy , where 1 means prediction is same as ground truth
+    - accuracy : a scalar between 0 and 1 ,describing the accuracy , where 1 means prediction is same as ground truth
     
     """
+    prediction = np.argmax(prediction, axis=-1)
+    target = np.argmax(target, axis=-1)
+    return np.mean(prediction==target)
 
 
 
 class Neural_Net():
-    def __init__(self,num_layers,num_units,input_dim,output_dim):
+    def __init__(self,num_layers,num_units,input_dim,output_dim,initialization="randn"):
         '''
         Initialize the weights and biases of the network
         Inputs:
@@ -86,7 +95,21 @@ class Neural_Net():
         - input_dim : Number of features i.e your one batch is of shape (batch_size * input_dim)
         - output_dim : Number of units in output layer , i.e number of classes
         '''
-        pass
+        self.inputSize = input_dim  # Number of neurons in input layer
+        self.outputSize = output_dim  # Number of neurons in output layer
+        neurons = [input_dim] + [num_units] * num_layers + [output_dim]
+        self.layers = len(neurons)
+        self.weights = []  # weights for each layer
+        self.biases = []  # biases in each layer
+
+        if initialization == 'uniform':
+            self.initializer = lambda h,w: np.random.uniform(-1,1,(h,w))
+        elif initialization == 'randn':
+            self.initializer = np.random.randn
+        for i in range(len(neurons) - 1):
+            # changed from rand to randn here as those give better training results
+            self.weights.append(self.initializer(neurons[i + 1], neurons[i]))  # weight matrix between layer i and layer i+1
+            self.biases.append(self.initializer(neurons[i + 1], 1))
         
         
     def forward(self, X):
@@ -96,38 +119,62 @@ class Neural_Net():
         Inputs :
         - X : a numpy array of dimension (n , number_of_features)
         Returns :
-        - probs : the predictions for the data.For each training example, probs 
+        - out : the predictions for the data. For each training example, out
                  contains the probability distribution over all classes.
                  a numpy array of dimension (n , number_of-classes)
-                         
-        Note : you might want to save the activation of each layer , which will be required during backward step
-                
+        - layer_dot_prod_z and layer_activations_a : archived z and a values for all layers
+                 needed for backward pass of backpropagation
+
         """
-        
-        pass
+        a = X.T # a is an array of shape (number_of_features, n)
+        layer_activations_a = [a]  # store the input as the input layer activations
+        layer_dot_prod_z = []
+        for i, param in enumerate(zip(self.biases, self.weights)):
+            b, w = param[0], param[1]
+            z = np.dot(w, a) + b
+            a = softmax(z) if i==self.layers-2 else ReLU(z)
+            layer_dot_prod_z.append(z)
+            layer_activations_a.append(a)
+        out = a.T
+        return out, layer_dot_prod_z, layer_activations_a
+
+
     
-    def backward(self, X, probs,targets, _lambda):
+    def backward(self, X, y, zs, activations, _lambda):
         """
         perform the backward step of backpropagation algorithm and calculate the gradient of loss function with respect to weights and biases (dL/dW,dL/db)
         Inputs:
         - X : a single batch, a numpy array of dimension (n , number_of_features)
+        - zs and activations: lists containing z and a values for all layers
         - probs : predictions for a single batch , a numpy array of dimension ( n, num_of_classes)
-        - targets : ground truth , a numpy array of dimension having dimension ( n, )
+        - y : ground truth , a numpy array of dimension having dimension ( n, )
         - _lambda : regularization constant
         
         Returns:
-        
-        - dW - gradient of total loss with respect to weights, 
-               
-        - db - gradient of total loss with respect to biases, 
-               
-        Note : Ideally , you would want to call the forward function for the same batch or data before calling the backward function,So that
-               the accumulated activations are consistent and not stale.
-               
-               Also Don't forget to take regularization into account while calculating gradients
+        - grad_w - gradient of total loss with respect to weights,
+        - grad_b - gradient of total loss with respect to biases,
         
         """
-        pass
+        grad_b = [np.zeros(b.shape) for b in self.biases]
+        grad_w = [np.zeros(w.shape) for w in self.weights]
+
+        m = X.shape[0]
+
+        # backward pass
+        delta = activations[-1] - y.T # derivative of the crossentropy loss with respect of z of last layer
+
+        # fill in the appropriate details for gradients of w and b
+        grad_b[-1] = np.sum(delta, axis=1, keepdims=True) / m + _lambda*self.biases[-1]
+        grad_w[-1] = np.dot(delta, activations[-2].T) / m + _lambda*self.weights[-1]
+
+        for l in range(2, self.layers):  # Here l is in backward sense i.e. last l th layer
+            z = zs[-l]
+            # Compute delta, gradients of b and w
+            delta = ReLUPrime(z) * np.dot(self.weights[-l + 1].T, delta)  # delta is dz
+            grad_b[-l] = np.sum(delta, axis=1, keepdims=True) / m + _lambda*self.biases[-l]
+            grad_w[-l] = np.dot(delta, activations[-l - 1].T) / m + _lambda*self.weights[-l]
+
+        return (grad_b, grad_w)
     
     
     def train(self, optimizer, _lambda, batch_size, max_epochs,train_input, train_target,val_input, val_target):
@@ -146,17 +193,16 @@ class Neural_Net():
 
             for i in range(len(batch_idxs)):
                 train_batch_input = train_input[batch_idxs[i],:] # input for a single batch
+                train_batch_target = train_target[batch_idxs[i],:] # target for a single batch
 
-                train_batch_target = train_target[batch_idxs[i]] # target for a single batch
+                out, dot_prod_z, activations_a = self.forward(train_batch_input) # perform the forward step
+                grads = self.backward(train_batch_input, train_batch_target, dot_prod_z,
+                                      activations_a, _lambda) #perform the backward step and calculate the gradients
 
-                probs = self.forward(train_batch_input) # perform the forward step
-
-                dW,db = self.backward(train_batch_input,probs, train_batch_target,_lambda) #perform the backward step and calculate the gradients
-
-                self.weights,self.biases = optimizer.step(self.weights,self.biases,dW,db) # update the weights
+                self.weights,self.biases = optimizer.step(self.weights,self.biases,grads[1],grads[0]) # update the weights
             if epoch % 5 == 0 :
-                train_probs = self.forward(train_input)
-                val_probs = self.forward(val_input)
+                train_probs,_,_ = self.forward(train_input)
+                val_probs,_,_ = self.forward(val_input)
                 train_loss = cross_entropy_loss(train_probs,train_target)
                 val_loss = cross_entropy_loss(val_probs,val_target)
                 train_acc = check_accuracy(self.predict(train_input),train_target)
@@ -173,7 +219,8 @@ class Neural_Net():
         - preds : Most probable class for each datapoint in X , a numpy array of shape (n,1)
         
         """
-        pass
+        preds, _, _ = self.forward(X)
+        return preds
 
 
 class Optimizer(object):
@@ -182,27 +229,43 @@ class Optimizer(object):
         """
         Initialize the learning rate
         """
-        pass
+        self.lr = learning_rate
 
-    def step(self, weights, biases, delta_weights, delta_biases):
+    def step(self, weights, biases, grad_w, grad_b):
         """
         update the gradients
         Inputs :
         - weights : weights of the network
         - biases : biases of the network
-        - delta_weights : gradients with respect to weights
-        - delta_biases : gradients with respect to biases
+        - grad_w : gradients with respect to weights
+        - grad_b : gradients with respect to biases
         Returns :
         Updated weights and biases
         """
-        pass
 
+        for i in range(len(weights)):
+            weights[i] -= self.lr * grad_w[i]
+            biases[i] -= self.lr * grad_b[i]
 
+        return weights, biases
+
+def get_csv_data(file_path):
+    data = pd.read_csv(file_path)
+    if 'letter' in data.columns: # indicator for whether ground-truth is available
+        data["target"] = data["letter"].apply(lambda x: ord(x) - ord("A"))
+        data = data.drop(columns=["letter"])
+        data = data.to_numpy()
+        return data[:, :-1], np.eye(26, dtype=int)[data[:,-1]] # targets are one-hot encoded
+    else:
+        return data.to_numpy()
 
 def read_data():
     """
     Read the train,validation and test data
     """
+    train_x, train_y = get_csv_data("data/train.csv")
+    val_x, val_y = get_csv_data("data/val.csv")
+    test_x = get_csv_data("data/test.csv")
     return train_x,train_y,val_x,val_y,test_x
 
 
@@ -210,13 +273,13 @@ def read_data():
 if __name__ == '__main__':
     max_epochs = 100
     batch_size = 128
-    learning_rate = 0.1
-    num_layers = 1
-    num_units = 64
+    learning_rate = 0.003
+    num_layers = 3
+    num_units = 32
     _lambda = 1e-5
     
     train_x,train_y,val_x,val_y,test_x = read_data()
-    net = Neural_Net(num_layers,num_units,train_x.shape[1],26)
+    net = Neural_Net(num_layers,num_units,train_x.shape[1],26,initialization="uniform")
     optimizer = Optimizer(learning_rate=learning_rate)
     net.train(optimizer,_lambda,batch_size,max_epochs,train_x,train_y,val_x,val_y)
     

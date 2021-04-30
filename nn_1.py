@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+# import tqdm
 
 np.random.seed(42)
 epsilon = 1e-7
@@ -107,7 +108,6 @@ class Neural_Net():
         elif initialization == 'randn':
             self.initializer = np.random.randn
         for i in range(len(neurons) - 1):
-            # changed from rand to randn here as those give better training results
             self.weights.append(self.initializer(neurons[i + 1], neurons[i]))  # weight matrix between layer i and layer i+1
             self.biases.append(self.initializer(neurons[i + 1], 1))
         
@@ -177,7 +177,8 @@ class Neural_Net():
         return (grad_b, grad_w)
     
     
-    def train(self, optimizer, _lambda, batch_size, max_epochs,train_input, train_target,val_input, val_target):
+    def train(self, optimizer, _lambda, batch_size, max_epochs,train_input, train_target,
+              val_input, val_target, verbose=True):
         """
         Here you will run backpropagation for max_epochs number of epochs and evaluate 
         the neural network on validation data.For each batch of data in each epoch you 
@@ -189,7 +190,7 @@ class Neural_Net():
         for epoch in range(max_epochs):
             idxs = np.arange(train_input.shape[0])
             np.random.shuffle(idxs) #shuffle the indices
-            batch_idxs = np.array_split(idxs,np.ceil(train_x.shape[0]/batch_size)) #split into a number of batches
+            batch_idxs = np.array_split(idxs,np.ceil(train_input.shape[0]/batch_size)) #split into a number of batches
 
             for i in range(len(batch_idxs)):
                 train_batch_input = train_input[batch_idxs[i],:] # input for a single batch
@@ -200,7 +201,7 @@ class Neural_Net():
                                       activations_a, _lambda) #perform the backward step and calculate the gradients
 
                 self.weights,self.biases = optimizer.step(self.weights,self.biases,grads[1],grads[0]) # update the weights
-            if epoch % 5 == 0 :
+            if epoch % 5 == 0 and verbose:
                 train_probs,_,_ = self.forward(train_input)
                 val_probs,_,_ = self.forward(val_input)
                 train_loss = cross_entropy_loss(train_probs,train_target)
@@ -209,6 +210,13 @@ class Neural_Net():
                 val_acc = check_accuracy(self.predict(val_input),val_target)
                 print("train_loss = {:.3f}, val_loss = {:.3f}, train_acc={:.3f}, val_acc={:.3f}".format(train_loss,val_loss,train_acc,val_acc))
 
+        if not verbose:
+            train_probs, _, _ = self.forward(train_input)
+            val_probs, _, _ = self.forward(val_input)
+            train_loss = cross_entropy_loss(train_probs, train_target)
+            val_loss = cross_entropy_loss(val_probs, val_target)
+            # print("train_loss = {:.3f}, val_loss = {:.3f}".format(train_loss, val_loss))
+            return train_loss, val_loss
                     
     def predict(self,X):
         """
@@ -268,21 +276,42 @@ def read_data():
     test_x = get_csv_data("data/test.csv")
     return train_x,train_y,val_x,val_y,test_x
 
+def part_1b():
+    data = pd.read_csv("part_1b.csv")
+    train_x, train_y, val_x, val_y, test_x = read_data()
+    for i in tqdm.tqdm(data.index):
+        np.random.seed(42)
+        max_epochs = 100
+        batch_size = 128
+        learning_rate = data.loc[i, "Learning Rate"]
+        num_layers = data.loc[i, "No. of hidden layers"]
+        num_units = data.loc[i, "Size of each hidden layer"]
+        _lambda = data.loc[i, "λ(regulariser)"]
+        net = Neural_Net(num_layers, num_units, train_x.shape[1], 26, initialization="uniform")
+        optimizer = Optimizer(learning_rate=learning_rate)
+        train_loss, val_loss = net.train(optimizer, _lambda, batch_size, max_epochs, train_x, train_y, val_x, val_y,
+                                         verbose=False)
+        data.loc[i, "Mean Cross Entropy loss(train)"] = np.round(train_loss, 3)
+        data.loc[i, "Mean Cross Entropy loss(val)"] = np.round(val_loss, 3)
+    data.to_csv("part_1b.csv", index=False)
 
 
 if __name__ == '__main__':
     max_epochs = 100
     batch_size = 128
-    learning_rate = 0.003
-    num_layers = 3
-    num_units = 32
+    learning_rate = 0.1
+    num_layers = 1
+    num_units = 64
     _lambda = 1e-5
-    
+
     train_x,train_y,val_x,val_y,test_x = read_data()
     net = Neural_Net(num_layers,num_units,train_x.shape[1],26,initialization="uniform")
     optimizer = Optimizer(learning_rate=learning_rate)
     net.train(optimizer,_lambda,batch_size,max_epochs,train_x,train_y,val_x,val_y)
-    
+
     test_preds = net.predict(test_x)
+
+    # # Part 1-b
+    # part_1b()
     
 

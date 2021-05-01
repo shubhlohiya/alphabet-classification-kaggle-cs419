@@ -108,6 +108,10 @@ class Neural_Net():
         elif initialization == 'randn':
             self.initializer = np.random.randn
         for i in range(len(neurons) - 1):
+<<<<<<< HEAD
+=======
+            # changed from rand to randn here as those give better training results
+>>>>>>> db52f735a93c32650c2bf737c5b40e42eb08a4f1
             self.weights.append(self.initializer(neurons[i + 1], neurons[i]))  # weight matrix between layer i and layer i+1
             self.biases.append(self.initializer(neurons[i + 1], 1))
         

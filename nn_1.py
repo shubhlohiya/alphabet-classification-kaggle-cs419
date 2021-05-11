@@ -296,6 +296,13 @@ def part_1b():
     data.to_csv("part_1b.csv", index=False)
 
 
+def save_predictions(preds):
+    preds = np.vectorize(lambda x: chr(x + ord("A")))(np.argmax(preds, axis=-1))
+    preds = pd.DataFrame(data=preds, columns=["letters"])
+    preds.index.name = "id"
+    preds.to_csv("preds.csv")
+
+
 if __name__ == '__main__':
     max_epochs = 100
     batch_size = 128
@@ -309,9 +316,8 @@ if __name__ == '__main__':
     optimizer = Optimizer(learning_rate=learning_rate)
     net.train(optimizer,_lambda,batch_size,max_epochs,train_x,train_y,val_x,val_y)
 
-    test_preds = net.predict(test_x)
-
     # # Part 1-b
     # part_1b()
-    
 
+    # test_preds = net.predict(test_x)
+    # save_predictions(test_preds)

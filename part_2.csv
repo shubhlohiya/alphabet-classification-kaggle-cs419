@@ -1,0 +1,7 @@
+HyperParameter, Value
+max_epochs, 500
+batch_size, 128
+learning_rate, 0.01
+num_layers, 1
+num_units, 300
+_lambda, 3e-3

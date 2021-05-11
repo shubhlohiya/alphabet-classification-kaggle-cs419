@@ -202,14 +202,15 @@ class Neural_Net():
                                       activations_a, _lambda) #perform the backward step and calculate the gradients
 
                 self.weights,self.biases = optimizer.step(self.weights,self.biases,grads[1],grads[0]) # update the weights
-            if epoch % 5 == 0 and verbose:
+            if (epoch+1) % 10 == 0 and verbose:
                 train_probs,_,_ = self.forward(train_input)
                 val_probs,_,_ = self.forward(val_input)
                 train_loss = cross_entropy_loss(train_probs,train_target)
                 val_loss = cross_entropy_loss(val_probs,val_target)
                 train_acc = check_accuracy(self.predict(train_input),train_target)
                 val_acc = check_accuracy(self.predict(val_input),val_target)
-                print("train_loss = {:.3f}, val_loss = {:.3f}, train_acc={:.3f}, val_acc={:.3f}".format(train_loss,val_loss,train_acc,val_acc))
+                print("Epoch = {}, train_loss = {:.3f}, val_loss = {:.3f}, train_acc={:.3f}, val_acc={:.3f}"
+                      .format(epoch+1, train_loss,val_loss,train_acc,val_acc))
 
         if not verbose:
             train_probs, _, _ = self.forward(train_input)
@@ -277,42 +278,25 @@ def read_data():
     test_x = get_csv_data("data/test.csv")
     return train_x,train_y,val_x,val_y,test_x
 
-def part_1b():
-    data = pd.read_csv("part_1b.csv")
-    train_x, train_y, val_x, val_y, test_x = read_data()
-    for i in tqdm.tqdm(data.index):
-        np.random.seed(42)
-        max_epochs = 100
-        batch_size = 128
-        learning_rate = data.loc[i, "Learning Rate"]
-        num_layers = data.loc[i, "No. of hidden layers"]
-        num_units = data.loc[i, "Size of each hidden layer"]
-        _lambda = data.loc[i, "λ(regulariser)"]
-        net = Neural_Net(num_layers, num_units, train_x.shape[1], 26, initialization="uniform")
-        optimizer = Optimizer(learning_rate=learning_rate)
-        train_loss, val_loss = net.train(optimizer, _lambda, batch_size, max_epochs, train_x, train_y, val_x, val_y,
-                                         verbose=False)
-        data.loc[i, "Mean Cross Entropy loss(train)"] = np.round(train_loss, 3)
-        data.loc[i, "Mean Cross Entropy loss(val)"] = np.round(val_loss, 3)
-    data.to_csv("part_1b.csv", index=False)
+def save_predictions(preds):
+    preds = np.vectorize(lambda x: chr(x + ord("A")))(np.argmax(preds, axis=-1))
+    preds = pd.DataFrame(data=preds, columns=["letters"])
+    preds.index.name = "id"
+    preds.to_csv("preds.csv")
 
 
 if __name__ == '__main__':
-    max_epochs = 100
+    max_epochs = 500
     batch_size = 128
-    learning_rate = 0.1
+    learning_rate = 0.01
     num_layers = 1
-    num_units = 64
-    _lambda = 1e-5
+    num_units = 300
+    _lambda = 3e-3
 
     train_x,train_y,val_x,val_y,test_x = read_data()
-    net = Neural_Net(num_layers,num_units,train_x.shape[1],26,initialization="uniform")
+    net = Neural_Net(num_layers,num_units,train_x.shape[1],26)
     optimizer = Optimizer(learning_rate=learning_rate)
     net.train(optimizer,_lambda,batch_size,max_epochs,train_x,train_y,val_x,val_y)
 
     test_preds = net.predict(test_x)
-
-    # # Part 1-b
-    # part_1b()
-    
-
+    save_predictions(test_preds)
